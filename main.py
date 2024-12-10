@@ -3,20 +3,26 @@ from src.evaluate import evaluate_model
 from src.utils import plot_results
 
 if __name__ == "__main__":
-    # Stock code to train and evaluate
-    stock_code = 'ABBA'  # Code (can be seen at DaftarSaham.csv file)
+    # Choosen stock codes
+    stock_codes = ['BBCA', 'BBRI', 'BMRI', 'INKP', 'TKIM', 'BYAN', 
+                   'TMAS', 'ASII', 'TLKM', 'UNVR', 'AMRT', 'ADRO']
 
-    # Train the model
-    scaler = train_model(stock_code)
+    for stock_code in stock_codes:
+        print(f"\nTraining model for {stock_code}...")
 
-    # Evaluate the model
-    results, metrics = evaluate_model(stock_code, scaler)
+        # Train the model
+        scaler = train_model(stock_code)
 
-    # Print evaluation metrics
-    if results is not None:
-        print("Evaluation Metrics:")
-        for key, value in metrics.items():
-            print(f"{key}: {value:.4f}")
+        # Evaluate the model
+        results, metrics = evaluate_model(stock_code, scaler)
 
-        # Plot results
-        plot_results(results['Actual'], results['Predicted'])
+        # Print evaluation metrics
+        if results is not None:
+            print(f"Evaluation Metrics for {stock_code}:")
+            for key, value in metrics.items():
+                print(f"{key}: {value:.4f}")
+
+            # Plot results
+            plot_results(results['Actual'], results['Predicted'])
+        else:
+            print(f"Failed to evaluate model for {stock_code}.")

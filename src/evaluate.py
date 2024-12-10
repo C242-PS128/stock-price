@@ -18,7 +18,7 @@ def evaluate_model(stock_code, scaler, time_step=60):
     X = X.reshape(X.shape[0], X.shape[1], 1)  # for LSTM
 
     # Load model
-    model = load_model('lstm_model.h5')
+    model = load_model(f"models/{stock_code}.h5")
 
     # Make predictions
     predictions = model.predict(X)
