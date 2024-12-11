@@ -1,15 +1,23 @@
 from flask import Flask, request, jsonify
 import numpy as np
+import tempfile
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from src.data_preprocessing import load_stock_data, load_current_price_data, preprocess_data, create_dataset
+from src.data_preprocessing import load_stock_data, preprocess_data, create_dataset
 from keras.models import load_model
 import pandas as pd
-import joblib  # Import joblib for loading the scaler
+import joblib
 import os
-
-from src.evaluate import evaluate_model
+import requests
 
 app = Flask(__name__)
+
+def download_file(bucket_name, file_name, destination_file_name):
+    url = f"https://storage.googleapis.com/{bucket_name}/{file_name}"
+    response = requests.get(url)
+
+    if response.status_code == 200:
+        with open(destination_file_name, 'wb') as f:
+            f.write(response.content)
 
 @app.route('/evaluate', methods=['POST'])
 def evaluate():
@@ -20,19 +28,26 @@ def evaluate():
     if not stock_code:
         return jsonify({'error': 'Please provide stock_code.'}), 400
 
-    # Load the model
-    model_file = f"models/{stock_code}.h5"
-    if not os.path.exists(model_file):
-        return jsonify({'error': f'Model for stock code {stock_code} not found.'}), 404
+    BUCKET = 'financebro-bucket'
+    MODEL_STOCK = f"models/{stock_code}.h5"
+    SCALER_STOCK = f"models/{stock_code}_scaler.pkl"
 
-    model = load_model(model_file)
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        models_dir = os.path.join(tmpdirname, 'models')
+        os.makedirs(models_dir, exist_ok=True)
 
-    # Load the scaler
-    scaler_file = f"models/{stock_code}_scaler.pkl"
-    if not os.path.exists(scaler_file):
-        return jsonify({'error': f'Scaler for stock code {stock_code} not found.'}), 404
+        model_path = os.path.join(models_dir, f"{stock_code}.h5")
+        scaler_path = os.path.join(models_dir, f"{stock_code}_scaler.pkl")
 
-    scaler = joblib.load(scaler_file)
+        try:
+            download_file(BUCKET, MODEL_STOCK, model_path)
+            download_file(BUCKET, SCALER_STOCK, scaler_path)
+
+            # Load the model and scaler
+            model = load_model(model_path)
+            scaler = joblib.load(scaler_path)
+        except Exception as e:
+            return jsonify({'error': f'Failed to load model or scaler: {str(e)}'}), 500
 
     # Load historical data for evaluation
     historical_data = load_stock_data(stock_code)
@@ -93,19 +108,29 @@ def predict():
     if not stock_code or not start_date or not end_date:
         return jsonify({'error': 'Please provide stock_code, start_date, and end_date.'}), 400
 
-    # Load the model
-    model_file = f"models/{stock_code}.h5"
-    if not os.path.exists(model_file):
-        return jsonify({'error': f'Model for stock code {stock_code} not found.'}), 404
+    BUCKET = 'financebro-bucket'
+    MODEL_STOCK = f"models/{stock_code}.h5"
+    SCALER_STOCK = f"models/{stock_code}_scaler.pkl"
 
-    model = load_model(model_file)  # Load the model
+    with tempfile.TemporaryDirectory() as tmpdirname:
+        # Create the models directory inside the temporary directory
+        models_dir = os.path.join(tmpdirname, 'models')
+        os.makedirs(models_dir, exist_ok=True)
 
-    # Load the scaler
-    scaler_file = f"models/{stock_code}_scaler.pkl"
-    if not os.path.exists(scaler_file):
-        return jsonify({'error': f'Scaler for stock code {stock_code} not found.'}), 404
+        # Define paths for temporary files
+        model_path = os.path.join(models_dir, f"{stock_code}.h5")
+        scaler_path = os.path.join(models_dir, f"{stock_code}_scaler.pkl")
 
-    scaler = joblib.load(scaler_file)  # Load the scaler
+        # Download the model and scaler from GCS
+        try:
+            download_file(BUCKET, MODEL_STOCK, model_path)
+            download_file(BUCKET, SCALER_STOCK, scaler_path)
+
+            # Load the model and scaler
+            model = load_model(model_path)
+            scaler = joblib.load(scaler_path)
+        except Exception as e:
+            return jsonify({'error': f'Failed to load model or scaler: {str(e)}'}), 500
 
     # Load historical data for prediction
     historical_data = load_stock_data(stock_code)
